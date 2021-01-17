@@ -28,12 +28,23 @@ import glob
 import logging
 import os.path
 import time
+import gpodder.secrets
+from PIL import Image
+from PIL import ImageFont
+from PIL import ImageDraw
 
 import gpodder
 from gpodder import download, services, util
+import asyncio
+import bitchute_client as bc
+
+from shlex import quote
+import shlex
+import pipes
+import subprocess
+from subprocess import check_call
 
 logger = logging.getLogger(__name__)
-
 
 _ = gpodder.gettext
 
@@ -55,6 +66,19 @@ except:
 #     pymtp_available = False
 #     logger.warning('Could not load gpopymtp (libmtp not installed?).')
 
+async def run_bc_upload(video_file, image_file, episode):
+    async with bc.Client() as client:
+        await client.login(gpodder.secrets.bitchute['user'],
+                           gpodder.secrets.bitchute['password'])
+        await client.upload(
+            bc.Media.from_file(video_file),
+            cover=bc.Media.from_file(image_file),
+            title=episode.title,
+            description=episode.description)
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main())
+        
+                
 mplayer_available = True if util.find_command('mplayer') is not None else False
 
 eyed3mp3_available = True
@@ -594,7 +618,24 @@ class MP3PlayerDevice(Device):
 
     def add_track(self, episode, reporthook=None):
         self.notify('status', _('Adding %s') % episode.title)
+        # episode.description
+        # episode.description_html
+        # file = episode.local_filename(create=False)
+        # episode.link
+        # episode.title
+        # cover
+        #
 
+        #bb =io.BytesIO(episode.channel.cover)
+        img = Image.open(episode.channel.cover_file +  ".jpg")
+        draw = ImageDraw.Draw(img)
+        #font = ImageFont.truetype("/usr/share/fonts-droid-fallback/truetype/DroidSansFallback.ttf", 8)
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 72)
+        draw.text((0, 0),episode.title,(255,255,255),font=font)
+
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 42)
+        yy = draw.multiline_text((0, 120),episode.description,(255,255,255),font=font)
+        #self.notify('status', _('Thumb %s') % str(dir(episode))
         # get the folder on the device
         folder = self.get_episode_folder_on_device(episode)
 
@@ -619,6 +660,10 @@ class MP3PlayerDevice(Device):
         to_file = self.get_episode_file_on_device(episode)
         to_file = os.path.join(folder, to_file)
 
+        image_file = to_file.replace(".mp3","").replace(".m4a","") + ".png"
+        video_file = to_file.replace(".mp3","").replace(".m4a","") + ".mp4"
+        img.save(image_file) # write the image
+
         if not os.path.exists(folder):
             try:
                 os.makedirs(folder)
@@ -632,6 +677,39 @@ class MP3PlayerDevice(Device):
                     to_file)
             self.copy_file_progress(from_file, to_file, reporthook)
 
+            cmd = ['ffmpeg',
+                   '-loop', '1',
+                   '-i', image_file,
+                   "-i", to_file,
+                   
+
+                   "-ac", "1",
+                   "-ar","16000",
+                   "-b:a","8K",
+                   "-vbr","constrained",
+                   
+                   "-vf", "scale=iw/4:ih/4",
+                   "-profile:v", "baseline",
+                   "-movflags", "+faststart",
+                   "-crf", "128",
+                   "-c:v",
+                   "libx264",
+                   "-tune", "stillimage",
+
+                   #"-c:a", "libopus",
+                   "-c:a", "aac",
+                   "-pix_fmt", "yuv420p", "-shortest",
+                   video_file
+                   #"'{}'".format(video_file)
+            ]
+            cmd = subprocess.list2cmdline(cmd)
+            check_call(shlex.split(cmd))
+
+            # now upload
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(run_bcupload(video_file, image_file, episode))
+            loop.close()
+        
         return True
 
     def copy_file_progress(self, from_file, to_file, reporthook=None):

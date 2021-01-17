@@ -220,3 +220,7 @@ check if the bug still appears to see if an extension causes the bug.
 - Bug tracker:                      https://github.com/gpodder/gpodder/issues
 - Mailing list:                     http://freelists.org/list/gpodder
 - IRC channel:                      #gpodder on irc.freenode.net
+
+
+# BBitChute
+pip3 install aiohttp  fake_useragent bs4
