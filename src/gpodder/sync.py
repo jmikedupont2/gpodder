@@ -196,6 +196,8 @@ def episode_filename_on_device(config, episode):
     # add the file extension
     to_file = filename_base + os.path.splitext(from_file)[1].lower()
 
+    to_file_name = os.path.splitext(from_file)[1].lower()
+
     # dirty workaround: on bad (empty) episode titles,
     # we simply use the from_file basename
     # (please, podcast authors, FIX YOUR RSS FEEDS!)
@@ -658,10 +660,12 @@ class MP3PlayerDevice(Device):
 
         # get the filename that will be used on the device
         to_file = self.get_episode_file_on_device(episode)
+        to_file_name = to_file
         to_file = os.path.join(folder, to_file)
 
         image_file = to_file.replace(".mp3","").replace(".m4a","") + ".png"
-        video_file = to_file.replace(".mp3","").replace(".m4a","") + ".mp4"
+        video_file = to_file.replace(".mp3","").replace(".m4a","") + ".avi"
+        cmd_file = to_file.replace(".mp3","").replace(".m4a","") + ".ps1"
         img.save(image_file) # write the image
 
         if not os.path.exists(folder):
@@ -677,38 +681,54 @@ class MP3PlayerDevice(Device):
                     to_file)
             self.copy_file_progress(from_file, to_file, reporthook)
 
-            cmd = ['ffmpeg',
-                   '-loop', '1',
-                   '-i', image_file,
-                   "-i", to_file,
-                   
-
-                   "-ac", "1",
-                   "-ar","16000",
-                   "-b:a","8K",
-                   "-vbr","constrained",
-                   
-                   "-vf", "scale=iw/4:ih/4",
-                   "-profile:v", "baseline",
-                   "-movflags", "+faststart",
-                   "-crf", "128",
-                   "-c:v",
-                   "libx264",
-                   "-tune", "stillimage",
-
-                   #"-c:a", "libopus",
-                   "-c:a", "aac",
-                   "-pix_fmt", "yuv420p", "-shortest",
-                   video_file
-                   #"'{}'".format(video_file)
+            #ffmpeg -i "$1" -acodec libfaac -ac 2 -ab 128k -s 480x320
+            #-vcodec libx264 -vpre libx264-hq -vpre libx264-ipod640 -b 768k -bt 512k -aspect 3:2 -threads 0 -f mp4 $1.mp4
+        cmd = ['ffmpeg',
+               '-loop', '1',
+               '-i', image_file,
+               "-i", to_file,               
+               #"-r", "1",
+               "-qmin", "3",
+               "-qmax", "5",
+               
+               "-ac", "2",
+               "-ab", "128k",
+               "-b:v", "512k",
+               "-aspect", "3:2",
+               "-threads", "4",
+               "-s" ,"480x320",
+               
+               #"-ar","16000",
+               "-b:a","44K",
+               "-vbr","constrained",               
+               "-vf", "scale=iw/4:ih/4",
+               "-profile:v", "baseline",
+               "-movflags", "+faststart",
+               "-crf", "16",
+               "-c:v",
+               "libx264",
+               #"-vtag", "xvid",
+               "-c:a", "libmp3lame",
+               "-reset_timestamps", "1",
+               "-tune", "stillimage",               
+               
+               "-pix_fmt", "yuv420p", "-shortest",
+               video_file
+               #"'{}'".format(video_file)
             ]
-            cmd = subprocess.list2cmdline(cmd)
+        #ffmpeg -i test.mpg -c:v libx264  test.avi
+        cmd = subprocess.list2cmdline(cmd)
+            
+        with open(cmd_file,"w") as fo:
+            fo.write(cmd.replace(folder + "/",""))
+        
+        if not os.path.exists(video_file):
             check_call(shlex.split(cmd))
 
             # now upload
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(run_bcupload(video_file, image_file, episode))
-            loop.close()
+            #loop = asyncio.get_event_loop()
+            #loop.run_until_complete(run_bcupload(video_file, image_file, episode))
+            #loop.close()
         
         return True
 
