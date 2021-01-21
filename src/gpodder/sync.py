@@ -629,18 +629,8 @@ class MP3PlayerDevice(Device):
         #
 
         #bb =io.BytesIO(episode.channel.cover)
-        img = Image.open(episode.channel.cover_file +  ".jpg")
-        draw = ImageDraw.Draw(img)
-        #font = ImageFont.truetype("/usr/share/fonts-droid-fallback/truetype/DroidSansFallback.ttf", 8)
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 72)
-        draw.text((0, 0),episode.title,(255,255,255),font=font)
 
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 42)
-        yy = draw.multiline_text((0, 120),episode.description,(255,255,255),font=font)
-        #self.notify('status', _('Thumb %s') % str(dir(episode))
-        # get the folder on the device
         folder = self.get_episode_folder_on_device(episode)
-
         filename = episode.local_filename(create=False)
         # The file has to exist, if we ought to transfer it, and therefore,
         # local_filename(create=False) must never return None as filename
@@ -663,10 +653,21 @@ class MP3PlayerDevice(Device):
         to_file_name = to_file
         to_file = os.path.join(folder, to_file)
 
-        image_file = to_file.replace(".mp3","").replace(".m4a","") + ".png"
+
         video_file = to_file.replace(".mp3","").replace(".m4a","") + ".avi"
         cmd_file = to_file.replace(".mp3","").replace(".m4a","") + ".ps1"
-        img.save(image_file) # write the image
+
+        image_file = to_file.replace(".mp3","").replace(".m4a","") + ".png"
+
+        jpg_file = episode.channel.cover_file +  ".jpg"
+        if not os.path.exists(image_file):
+            img = Image.open(jpg_file)
+            draw = ImageDraw.Draw(img)
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 72)
+            draw.text((0, 0),episode.title,(255,255,255),font=font)
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 42)
+            yy = draw.multiline_text((0, 120),episode.description,(255,255,255),font=font)
+            img.save(image_file) # write the image
 
         if not os.path.exists(folder):
             try:
@@ -683,7 +684,7 @@ class MP3PlayerDevice(Device):
 
             #ffmpeg -i "$1" -acodec libfaac -ac 2 -ab 128k -s 480x320
             #-vcodec libx264 -vpre libx264-hq -vpre libx264-ipod640 -b 768k -bt 512k -aspect 3:2 -threads 0 -f mp4 $1.mp4
-        cmd = ['ffmpeg',
+            cmd = ['ffmpeg',
                '-framerate', '2',
                '-loop', '1',
                '-i', image_file,
@@ -714,11 +715,12 @@ class MP3PlayerDevice(Device):
                video_file
                #"'{}'".format(video_file)
             ]
-        #ffmpeg -i test.mpg -c:v libx264  test.avi
-        cmd = subprocess.list2cmdline(cmd)
-            
-        with open(cmd_file,"w") as fo:
-            fo.write(cmd.replace(folder + "/",""))
+            #ffmpeg -i test.mpg -c:v libx264  test.avi
+            cmd = subprocess.list2cmdline(cmd)
+
+        if not os.path.exists(cmd_file):
+            with open(cmd_file,"w") as fo:
+                fo.write(cmd.replace(folder + "/",""))
         
         if not os.path.exists(video_file):
             check_call(shlex.split(cmd))
